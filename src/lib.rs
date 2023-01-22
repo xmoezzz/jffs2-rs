@@ -113,7 +113,7 @@ struct Jffs2Dirent {
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-struct Jffs2Inode {
+pub struct Jffs2Inode {
     // jint32_t ino;        /* Inode number.  */
     // jint32_t version;    /* Version number.  */
     // jmode_t mode;       /* The file's type or mode.  */
@@ -142,6 +142,66 @@ struct Jffs2Inode {
     data: u32,
 }
 
+impl Jffs2Inode {
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+
+    pub fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    /// Size after compression
+    pub fn compressed_size(&self) -> u32 {
+        self.csize
+    }
+    
+    /// Original size
+    pub fn decompressed_size(&self) -> u32 {
+        self.dsize
+    }
+
+    /// Compression method
+    pub fn compression_method(&self) -> u8 {
+        self.compr
+    }
+
+    /// Data Offset in the file
+    pub fn data_offset(&self) -> u32 {
+        self.data
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Jffs2Entry {
+    inodes: Vec<Jffs2Inode>,
+    is_file: bool,
+    path: PathBuf,
+}
+
+impl Jffs2Entry {
+    /// The original file size of the dirent
+    pub fn size(&self) -> u64 {
+        let mut dirent_size = 0 as u64;
+        for node in &self.inodes {
+            dirent_size += node.decompressed_size() as u64;
+        }
+        
+        dirent_size
+    }
+
+    /// Returns true if the current dirent represents a file, 
+    /// otherwise, the current dirent represents a folder
+    pub fn is_file(&self) -> bool {
+        self.is_file
+    }
+
+    /// Path of the current dirent within the filesystem
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+}
+
 #[derive(Debug)]
 struct Jffs2Reader {
     buffer: memmap::Mmap,
@@ -154,7 +214,7 @@ struct Jffs2Reader {
 // https://github.com/sviehb/jefferson/blob/master/src/scripts/jefferson
 
 impl Jffs2Reader {
-    pub fn new(path: &Path) -> Result<Self> {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let file = File::open(path)?;
         let buffer = unsafe { MmapOptions::new().map(&file)? };
         if buffer.len() < 2 {
@@ -551,27 +611,63 @@ impl Jffs2Reader {
         bail!("cannot resolve dirent {}", node);
     }
 
-    pub fn dump(&self, target_path: &Path) -> Result<()> {
+    pub fn dump(&self, target_path: impl AsRef<Path>) -> Result<()> {
         for i in self.dirents.keys() {
             let (output_path, ntype) = self.resolve_dirent(*i)?;
             if ntype == DT_DIR {
-                std::fs::create_dir_all(target_path.join(output_path))?;
+                std::fs::create_dir_all(target_path.as_ref().join(output_path))?;
             } else if ntype == DT_REG {
-                self.dump_file(&target_path.join(output_path), *i)?;
+                self.dump_file(&target_path.as_ref().join(output_path), *i)?;
             }
         }
 
         Ok(())
+    }
+
+    pub fn entries(&self) -> Result<Vec<Jffs2Entry>> {
+        let mut jffs2_entries = vec![];
+        for i in self.dirents.keys() {
+            let (output_path, ntype) = self.resolve_dirent(*i)?;
+            if ntype == DT_DIR {
+                let entry = Jffs2Entry {
+                    inodes: vec![],
+                    is_file: false,
+                    path: output_path.clone(),
+                };
+                jffs2_entries.push(entry);
+            } else if ntype == DT_REG {
+                let inodes = match self.inodes.get(i) {
+                    Some(sorted_inodes) => sorted_inodes.to_owned(),
+                    _ => vec![],
+                };
+
+                let entry = Jffs2Entry {
+                    inodes,
+                    is_file: true,
+                    path: output_path.clone(),
+                };
+                jffs2_entries.push(entry);
+            }
+        }
+
+        Ok(jffs2_entries)
     }
 }
 
 /// extract the data from a jffs2 file
 /// input : the jffs2 file
 /// output : the output path
-pub fn extract_jffs2(input: &Path, output: &Path) -> Result<()> {
+pub fn extract_jffs2(input: impl AsRef<Path>, output: impl AsRef<Path>) -> Result<()> {
     let mut reader = Jffs2Reader::new(input)?;
     reader.scan()?;
     reader.dump(output)
+}
+
+/// List all entries within the jffs2 image
+pub fn list_jffs2(input: impl AsRef<Path>) -> Result<Vec<Jffs2Entry>> {
+    let mut reader = Jffs2Reader::new(input)?;
+    reader.scan()?;
+    reader.entries()
 }
 
 #[cfg(test)]
