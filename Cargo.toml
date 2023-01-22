@@ -1,0 +1,26 @@
+[package]
+name = "jffs2"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/xmoezzz/jffs2-rs"
+repository = "https://github.com/xmoezzz/jffs2-rs"
+description = "Rust implementation of jffs2 reader🦀"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { version = "*", features = ["backtrace"] }
+memmap = "0.7.0"
+lzma-rs = "0.2.0"
+
+flate2 = "1.0"
+lexiclean = "0.0.1"
+
+byteorder-pack = "0.1.0"
+
+[build-dependencies]
+cmake = "0.1"
+target_build_utils = "0.3.1"
+
