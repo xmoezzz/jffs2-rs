@@ -11,7 +11,7 @@ description = "Rust implementation of jffs2 reader🦀"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { version = "*", features = ["backtrace"] }
+anyhow = { version = "1.0.68", features = ["backtrace"] }
 memmap = "0.7.0"
 lzma-rs = "0.2.0"
 
